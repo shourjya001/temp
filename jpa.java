@@ -1,8 +1,8 @@
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.persistence.EntityManager;
+import javax.persistence.PersistenceContext;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -11,7 +11,7 @@ public class DbeClientDaoImpl implements DbeClientDao {
     private static final int BATCH_SIZE = 1000;
     private static final int LOG_INTERVAL = 10000;
 
-    @Autowired
+    @PersistenceContext
     private EntityManager entityManager;
 
     private AtomicInteger totalInserted = new AtomicInteger(0);
@@ -40,11 +40,16 @@ public class DbeClientDaoImpl implements DbeClientDao {
             event.setNature(relationship.getNature());
             event.setStatus(relationship.getStatus());
             if (!reasonsArrayList.isEmpty()) {
-                event.setGoldenBdrId(reasonsArrayList.get(0).getGoldenBdrId());
-                event.setLabel(reasonsArrayList.get(0).getLabel());
+                // Check if these methods exist in your Reasons class
+                if (reasonsArrayList.get(0).getGoldenBdrId() != null) {
+                    event.setGoldenBdrId(reasonsArrayList.get(0).getGoldenBdrId());
+                }
+                if (reasonsArrayList.get(0).getLabel() != null) {
+                    event.setLabel(reasonsArrayList.get(0).getLabel());
+                }
             }
 
-            entityManager.persist(event);
+            entityManager.merge(event);
 
             if (i % BATCH_SIZE == 0 || i == relationships.size() - 1) {
                 entityManager.flush();
