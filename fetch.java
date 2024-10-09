@@ -44,20 +44,25 @@ public class ApiDataFetcher {
             mapperObj.configure(DeserializationFeature.ACCEPT_SINGLE_VALUE_AS_ARRAY, true);
             mapperObj.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
             
+            // Parse the JSON as a list of ResponseInternalRatingsEvent objects
             List<ResponseInternalRatingsEvent> responseObjects = mapperObj.readValue(json, 
                 new TypeReference<List<ResponseInternalRatingsEvent>>() {});
             
             // Combine all relationships into a single list
             List<Relationship> allRelationships = new ArrayList<>();
             for (ResponseInternalRatingsEvent wrapper : responseObjects) {
-                allRelationships.addAll(wrapper.getRelationships());
+                if (wrapper.getRelationships() != null) {
+                    allRelationships.addAll(wrapper.getRelationships());
+                }
             }
             
             // Create a new object with all relationships
             ResponseInternalRatingsEvent transformedData = new ResponseInternalRatingsEvent();
             transformedData.setRelationships(allRelationships);
             
-            return transformedData;
+            // Convert back to JSON and then to a single ResponseInternalRatingsEvent object
+            String transformedJson = mapperObj.writeValueAsString(transformedData);
+            return mapperObj.readValue(transformedJson, ResponseInternalRatingsEvent.class);
         } catch (IOException e) {
             System.err.println("Error processing JSON data: " + e.getMessage());
             e.printStackTrace();
