@@ -31,17 +31,9 @@ public class RobustApiDataFetcher {
     }
 
     private String decompressData(byte[] compressedBytes) {
-        try (ByteArrayInputStream bais = new ByteArrayInputStream(compressedBytes);
-             GZIPInputStream gzipInputStream = new GZIPInputStream(bais);
-             ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
-            
-            byte[] buffer = new byte[1024];
-            int len;
-            while ((len = gzipInputStream.read(buffer)) > 0) {
-                outputStream.write(buffer, 0, len);
-            }
-            
-            return outputStream.toString(StandardCharsets.UTF_8.name());
+        try (GZIPInputStream gzipInputStream = new GZIPInputStream(new ByteArrayInputStream(compressedBytes));
+             InputStreamReader reader = new InputStreamReader(gzipInputStream, StandardCharsets.UTF_8)) {
+            return IOUtils.toString(reader);
         } catch (IOException e) {
             System.err.println("Error decompressing GZIP content: " + e.getMessage());
             e.printStackTrace();
@@ -49,24 +41,24 @@ public class RobustApiDataFetcher {
         }
     }
 
-    private ResponseWrapper processJsonData(String json) {
+    private RobustApiDataFetcher processJsonData(String json) {
         ObjectMapper mapperObj = new ObjectMapper();
         mapperObj.configure(DeserializationFeature.ACCEPT_SINGLE_VALUE_AS_ARRAY, true);
         mapperObj.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
         try {
-            // First, try to parse as a single ResponseWrapper
-            ResponseWrapper singleObject = mapperObj.readValue(json, ResponseWrapper.class);
+            // First, try to parse as a single RobustApiDataFetcher
+            RobustApiDataFetcher singleObject = mapperObj.readValue(json, RobustApiDataFetcher.class);
             return singleObject;
         } catch (JsonProcessingException e) {
             // If parsing as a single object fails, try parsing as a list
             try {
-                List<ResponseWrapper> responseObjects = mapperObj.readValue(json, new TypeReference<List<ResponseWrapper>>() {});
+                List<RobustApiDataFetcher> responseObjects = mapperObj.readValue(json, new TypeReference<List<RobustApiDataFetcher>>() {});
                 
-                // Combine all relationships into a single ResponseWrapper
-                ResponseWrapper combinedResponse = new ResponseWrapper();
+                // Combine all events into a single RobustApiDataFetcher
+                RobustApiDataFetcher combinedResponse = new RobustApiDataFetcher();
                 List<ResponseInternalRatingsEvent> allEvents = new ArrayList<>();
-                for (ResponseWrapper wrapper : responseObjects) {
+                for (RobustApiDataFetcher wrapper : responseObjects) {
                     if (wrapper.getResponseInternalRatingsEvents() != null) {
                         allEvents.addAll(wrapper.getResponseInternalRatingsEvents());
                     }
