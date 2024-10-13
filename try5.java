@@ -7,6 +7,50 @@ import java.util.zip.Inflater;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 
+
+private String decompressData(byte[] compressedBytes) {
+    // First, try GZIP decompression
+    try {
+        ByteArrayInputStream bis = new ByteArrayInputStream(compressedBytes);
+        GZIPInputStream gis = new GZIPInputStream(bis);
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        byte[] buffer = new byte[1024];
+        int len;
+        while ((len = gis.read(buffer)) != -1) {
+            bos.write(buffer, 0, len);
+        }
+        gis.close();
+        bos.close();
+        return new String(bos.toByteArray(), StandardCharsets.UTF_8);
+    } catch (IOException e) {
+        System.out.println("GZIP decompression failed, trying Inflater: " + e.getMessage());
+    }
+
+    // If GZIP fails, try Inflater
+    try {
+        Inflater inflater = new Inflater(true); // true for ZLIB header
+        inflater.setInput(compressedBytes);
+
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream(compressedBytes.length);
+        byte[] buffer = new byte[1024];
+        while (!inflater.finished()) {
+            int count = inflater.inflate(buffer);
+            outputStream.write(buffer, 0, count);
+        }
+        outputStream.close();
+        inflater.end();
+
+        return new String(outputStream.toByteArray(), StandardCharsets.UTF_8);
+    } catch (DataFormatException | IOException e) {
+        System.err.println("Error decompressing content with Inflater: " + e.getMessage());
+        e.printStackTrace();
+    }
+
+    // If both decompression methods fail, return the original data as a string
+    System.out.println("Both decompression methods failed. Returning original data as string.");
+    return new String(compressedBytes, StandardCharsets.UTF_8);
+}
+
 public ResponseInternalRatingsEvent sendInternalRatingsEventsApi() throws IOException, JsonException {
     String access_token = generateSGconnectToken();
     ResponseInternalRatingsEvent responseObject = null;
@@ -22,15 +66,15 @@ public ResponseInternalRatingsEvent sendInternalRatingsEventsApi() throws IOExce
     headers.set("Accept", "*/*");
     headers.set("content-type", "application/json");
     headers.set("accept", "application/octet-stream");
-    headers.set("Accept-Encoding", "identity");
+    headers.set("Accept-Encoding", "gzip, deflate");
     
     HttpEntity<String> entity = new HttpEntity<>("", headers);
     
-    ResponseEntity<String> result = restTemplate.exchange(
+    ResponseEntity<byte[]> result = restTemplate.exchange(
         this.dbeclientProperties.getMaestroLebdrIdApiUrl() + maestrodate,
         HttpMethod.GET,
         entity,
-        String.class
+        byte[].class
     );
     
     int status = result.getStatusCode().value();
@@ -44,10 +88,11 @@ public ResponseInternalRatingsEvent sendInternalRatingsEventsApi() throws IOExce
     
     if (status == 200) {
         System.out.println("Successfully Data received from Maestro");
-        byte[] compressedBytes = result.getBody().getBytes(StandardCharsets.ISO_8859_1);
-        String decompressedJson = decompressData(compressedBytes);
+        byte[] responseBody = result.getBody();
+        String decompressedJson = decompressData(responseBody);
         
         if (decompressedJson == null) {
+            System.err.println("Failed to decompress or read the response data");
             return null;
         }
         
@@ -70,7 +115,7 @@ public ResponseInternalRatingsEvent sendInternalRatingsEventsApi() throws IOExce
             transformedData.setRelationships(allRelationships);
             
             String transformedJson = mapperObj.writeValueAsString(transformedData);
-            System.out.println(transformedJson);
+            System.out.println("Transformed JSON: " + transformedJson);
             
             responseObject = mapperObj.readValue(transformedJson, ResponseInternalRatingsEvent.class);
         } catch (JsonProcessingException e) {
@@ -81,29 +126,6 @@ public ResponseInternalRatingsEvent sendInternalRatingsEventsApi() throws IOExce
         System.err.println("Unexpected status code: " + status);
     }
     
-    System.out.println(responseObject);
+    System.out.println("Response object: " + responseObject);
     return responseObject;
-}
-
-private String decompressData(byte[] compressedBytes) {
-    try {
-        Inflater inflater = new Inflater(true);
-        inflater.setInput(compressedBytes);
-
-        ByteArrayOutputStream outputStream = new ByteArrayOutputStream(compressedBytes.length);
-        byte[] buffer = new byte[1024];
-        while (!inflater.finished()) {
-            int count = inflater.inflate(buffer);
-            outputStream.write(buffer, 0, count);
-        }
-        outputStream.close();
-        inflater.end();
-
-        byte[] decompressedBytes = outputStream.toByteArray();
-        return new String(decompressedBytes, StandardCharsets.UTF_8);
-    } catch (Exception e) {
-        System.err.println("Error decompressing content: " + e.getMessage());
-        e.printStackTrace();
-        return null;
-    }
 }
